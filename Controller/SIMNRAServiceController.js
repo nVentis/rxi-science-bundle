@@ -14,13 +14,6 @@ import SpectrumExportRepository from "../Managed/Repository/SpectrumExportReposi
 import SIMNRALayerRepository from "../Managed/Repository/SIMNRALayerRepository.mjs";
 import SIMNRALayerPartRepository from "../Managed/Repository/SIMNRALayerPartRepository.mjs";
 
-import {
-	SpectrumAnalysisExportAllLayerConcentration,
-	SpectrumAnalysisExportFirstLayerData,
-	SpectrumAnalysisExportThicknessesUntilPrevalenceReached,
-	SpectrumAnalysisExportPrevalenceSumUntilThicknessReached
-} from "../Dedicated/SIMNRAService.mjs";
-
 import {createRequire } from "module";
 const require = createRequire(import.meta.url);
 let winax = require("winax");
@@ -56,6 +49,24 @@ class SIMNRAApp {
 
 }
 
+/**
+ * Used in .ReadSpectrumData()
+ * @type {{RUMP_RBS: number, IAEA_SPE: number, ASCII_CHANNELS_VS_COUNTS: number, ASCII_WITHOUT_CHANNELS: number, CANBERRA_AVA: number, FAST_COMTEC_MPA: number, ASCII_ENERGIES_VS_COUNTS: number, CANBERRA_CAM: number, MCERD: number, XNRA_OR_IDF: number, USER_DEFINED: number}}
+ */
+let SPECTRUM_FORMAT_ENUM = {
+	ASCII_CHANNELS_VS_COUNTS: 1,
+	CANBERRA_CAM: 2,
+	RUMP_RBS: 4,
+	USER_DEFINED: 5,
+	MCERD: 6,
+	ASCII_WITHOUT_CHANNELS: 7,
+	ASCII_ENERGIES_VS_COUNTS: 8, // in keV
+	XNRA_OR_IDF: 9,
+	CANBERRA_AVA: 10,
+	FAST_COMTEC_MPA: 11,
+	IAEA_SPE: 13
+}
+
 class SIMNRAInstance {
 	#Instance = {
 		App: null,
@@ -63,6 +74,12 @@ class SIMNRAInstance {
 	};
 	#Running = true;
 	Name = "None";
+
+	/**
+	 * Path to an opened file (if any)
+	 * @type {string}
+	 */
+	simnraFilePath = "";
 
 	Stop () {
 		// Leave it to the user to close this session
@@ -79,7 +96,41 @@ class SIMNRAInstance {
 	async Open (fsPath) {
 		//await waitForMs(500);
 
+		this.simnraFilePath = fsPath;
+
 		this.#Instance.App.Open(fsPath, true);
+	}
+
+	/**
+	 *
+	 * @param {string} fsPath - Will default to this.simnraFilePath
+	 * @param {number} [fileType=2]
+	 * @returns {Promise<boolean>}
+	 */
+	async SaveAs (fsPath, fileType = 2) {
+		if (!fsPath) {
+			if (this.simnraFilePath)
+				fsPath = this.simnraFilePath;
+			else
+				throw new InvalidTypeException("fsPath");
+		}
+
+		let Result = this.#Instance.App.SaveAs(fsPath, fileType);
+
+		return !!Result;
+	}
+
+
+	/**
+	 *
+	 * @param {string} fsPath
+	 * @param {number} format - See SPECTRUM_FORMAT_ENUM
+	 * @returns {Promise<boolean>}
+	 */
+	async ReadSpectrumData (fsPath, format = SPECTRUM_FORMAT_ENUM.ASCII_CHANNELS_VS_COUNTS) {
+		let Result = this.#Instance.App.ReadSpectrumData(fsPath, format);
+
+		return !!Result;
 	}
 
 	WriteSpectrumData (fsPathResult) {
@@ -503,11 +554,11 @@ class SIMNRAServiceController extends SCHController {
 		if (this.#doExports.onStart)
 			await this.performExports(true);
 
-		let spectrumAnalysisExports = [
-			 new SpectrumAnalysisExportFirstLayerData(
-			 	"FeW-ColllectionAll-Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
+		let layerProfileGroups = [
+			{
+				Name: "FeW-Si-ColllectionAll-Comparison",
+				Output: "E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
+				Files: [
 					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-01_FeW_Si-1_4MeV#1.xnra",
 					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-05_FeW_Si-1_4MeV#1.xnra",
 					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-09_FeW_Si-1_4MeV#1.xnra",
@@ -531,212 +582,7 @@ class SIMNRAServiceController extends SCHController {
 					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-70_FeW_Si-4_4MeV#1.xnra",
 					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-75_FeW_Si-4_4MeV#1.xnra"
 				]
-			 ),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-All-CollectionPolarAll-Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-01_FeW_Si-1_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-05_FeW_Si-1_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-09_FeW_Si-1_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-13_FeW_Si305_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-14_FeW_Si-307-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-21_FeW_Si-310_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-23_FeW_Si305_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-24_FeW_Si-307-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-31_FeW_Si-309_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-40_FeW_Si308_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-45_FeW_Si308_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-54_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-70_FeW_Si-4_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-75_FeW_Si-4_4MeV#1.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-18_FeW_Si305_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-16_FeW_Si-310_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-19_FeW_Si-307-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-35_FeW_Si308_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-36_FeW_Si-309_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-50_FeW_Si-2_4MeV-10uC.xnra", // 20
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-50_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si306_1MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si-4_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si306_4MeV#1.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-C layers\\r-55_FeW_C-3-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-C layers\\r-55_FeW_C-4_4MeV#1c2.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-C layers\\r-60_FeW_C-4_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-C layers\\r-65_FeW_C-4_4MeV#1.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-29_p-71_FeW_Fe20-69-i_4MeV.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-34_p-76_FeW_Fe20-69-i_4MeV.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-39_p-81_FeW_Fe20-69-i_4MeV.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-29_p-55_FeW_Fe20-66-i_4MeV.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-34_p-60_FeW_Fe20-66-i_4MeV.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-39_p-65_FeW_Fe20-66-i_4MeV.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-30-FeW_Fe20-67-i_4MeV#1c1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-35-FeW_Fe20-67-i_4MeV#1.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-18-FeW_Fe20-14-i_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-22-FeW_Fe20-14-i_4MeV#1.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Fe layers\\r-14_FeW_Fe20-17-i-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Fe layers\\r-19_FeW_Fe20-17-i-4MeV_10uC.xnra",
-
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-30_FeW_Fe20-02-i_4MeV#1c1.xnra"
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolarAll-Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-18_FeW_Si305_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-16_FeW_Si-310_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-19_FeW_Si-307-4MeV_10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-35_FeW_Si308_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-36_FeW_Si-309_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-50_FeW_Si-2_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-50_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si306_1MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si-4_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si306_4MeV#1.xnra"
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolar-ComparisonA",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-18_FeW_Si305_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-16_FeW_Si-310_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-19_FeW_Si-307-4MeV_10uC.xnra",
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolar-ComparisonB",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-35_FeW_Si308_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-36_FeW_Si-309_4MeV-10uC.xnra",
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolar-ComparisonC",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 a\\FeW-Si layers\\r-50_FeW_Si-2_4MeV-10uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-50_FeW_Si-3_4MeV#1.xnra",
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolar-ComparisonD",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si-3_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-60_FeW_Si306_1MeV#1.xnra",
-				]
-			),
-			new SpectrumAnalysisExportFirstLayerData(
-				"FeW-Si-ColllectionPolar-ComparisonE",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si-4_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Si layers\\r-65_FeW_Si306_4MeV#1.xnra"
-				]
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-65-800K-3h-200eV_normalFlux_pos32_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe mod D beam normalFlux\\r-39_p-32_FeW_Fe20-65-800K-3h-200eV_normalFlux_4MeV_45uC.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-65-800K-3h-200eV_normalFlux_pos28_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe mod D beam normalFlux\\r-35_p-28_FeW_Fe20-65-800K-3h-200eV_normalFlux_4MeV_45uC.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-67-800K-3h-200eV_reducedFlux_pos49_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe mod D beam reducedFlux\\r-38_p-49_FeW_Fe20-67-800K-3h-200eV_reducedFlux_4MeV_45uC.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-67-i_r30_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-30-FeW_Fe20-67-i_4MeV#1c1.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-69-i_r34_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\August 2020\\FeW-Fe layers\\r-34_p-76_FeW_Fe20-69-i_4MeV.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-18-800K-3h_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe mod layers\\r-16-FeW_Fe20-18-800K-3h_4MeV#1.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-15-800K-60h_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-31_FeW_Fe20-15-800K-60h_4MeV_30uC.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-10-830K-3h_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-31_FeW_Fe20-10-830K-3h_4MeV_30uC#001.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-13-900K-3h_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-20_FeW_Fe20-13-900K-3h_4MeV_30uC#001.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportAllLayerConcentration(
-				"Fe20-14-1200K-2h_W",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-23_FeW_Fe20-14-1200K-2h_4MeV_10uC.xnra",
-				"W",
-				true
-			),
-			new SpectrumAnalysisExportPrevalenceSumUntilThicknessReached(
-				"SpectrumAnalysisExportPrevalenceSumUntilThicknessReached180",
-				"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\Comparison",
-				[
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe mod layers\\r-16-FeW_Fe20-18-800K-3h_4MeV#1.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-31_FeW_Fe20-15-800K-60h_4MeV_30uC.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-31_FeW_Fe20-10-830K-3h_4MeV_30uC#001.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-20_FeW_Fe20-13-900K-3h_4MeV_30uC#001.xnra",
-					"E:\\DevRepositories\\genetix-server\\SIMNRAroot\\June 2020 b\\FeW-Fe mod heated\\r-23_FeW_Fe20-14-1200K-2h_4MeV_10uC.xnra"//, "E:\\DevRepositories\\genetix-server\\SIMNRAroot\\March 2020\\FeW-Fe layers\\r-30-FeW_Fe20-67-i_4MeV#1c1.xnra"
-				],
-				[
-					"800K 3h",
-					"800K 60h",
-					"830K 3h",
-					"900K 3h",
-					"1200K 2h"//, "initial",
-				],
-				"W",
-				180
-			),
-
+			}
 		];
 
 		if (this.#doExports.onUpdate) {
@@ -758,270 +604,85 @@ class SIMNRAServiceController extends SCHController {
 						console.log("Nothing to re-export");
 				}
 
-				await Promise.all(spectrumAnalysisExports.map(async function (spectrumAnalysis) {
+				await Promise.all(layerProfileGroups.map(async function (spectrumGroup) {
 					if (!spectrumUpdated)
 						return;
 
-					let spectrumAnalysisFiles = spectrumAnalysis.Files;
+					let spectrumGroupFiles = spectrumGroup.Files;
 
-					if (spectrumAnalysis instanceof SpectrumAnalysisExportFirstLayerData) {
-						/**
-						 *
-						 * @type {{"O ": null, r: number, d: number, "W ": null, Fe: null}[]}
-						 */
-						let layerConcentrations = await Promise.all(spectrumAnalysisFiles.map(async function (spectrumExportPath) {
-							let spectrumExport = await SpectrumExport.query().findOne({
-								fsPath: spectrumExportPath
-							}).withGraphFetched("Layers.[Parts]");
-
-							/**
-							 * @type {SIMNRALayer}
-							 */
-							let layer = spectrumExport.Layers.filter((layer) => layer.index === 1).pop();
-
-							/**
-							 * @type {string}
-							 */
-							let splitPart = spectrumExportPath.split("r-")[1];
-
-							/**
-							 * @type {number}
-							 */
-							let radius = +(splitPart.includes("_p-") ? splitPart.split("_p-")[0] : (splitPart.includes("_FeW") ? splitPart.split("_FeW")[0] : splitPart.split("-FeW")[0]));
-
-							let concentrations = {
-								"Fe": null,
-								"W ": null,
-								"O ": null
-							}
-
-							// NEW: Conversion to at. %
-							for (let layerPart of layer.Parts)
-								concentrations[layerPart.elementName] = layerPart.elementConcentration * 100;
-
-							return {...concentrations, r: radius, d: layer.thickness}
-						}));
-
-						/**
-						 * NEW: Save contents to CSV file linked in OriginLab
-						 */
-
-						let csvData = layerConcentrations.map((entry) => [entry.r, entry.Fe, entry["W "], entry["O "], entry.d]);
-
-						// Add header
-						csvData.unshift([
-							"mm", "at %", "at %", "at %", "10^15 atoms/cm²"
-						]);
-						csvData.unshift([
-							"r", "c_Fe", "c_W", "c_O", "d"
-						]);
-
-						console.log(spectrumAnalysis.Name, csvData);
-
-						csv.stringify(csvData, {delimiter: `;`}, (e, output) => {
-							FS.writeFileSync(Path.join(spectrumAnalysis.Output, spectrumAnalysis.Name + ".csv"), output);
-						});
-					} else if (spectrumAnalysis instanceof SpectrumAnalysisExportAllLayerConcentration) {
+					/**
+					 *
+					 * @type {{"O ": null, r: number, "W ": null, Fe: null}[]}
+					 */
+					let layerConcentrations = await Promise.all(spectrumGroupFiles.map(async function (spectrumExportPath) {
 						let spectrumExport = await SpectrumExport.query().findOne({
-							fsPath: spectrumAnalysis.Files[0]
+							fsPath: spectrumExportPath
 						}).withGraphFetched("Layers.[Parts]");
 
 						/**
-						 * @type {SIMNRALayer[]}
+						 * @type {SIMNRALayer}
 						 */
-						let layers = spectrumExport.Layers.sort((a,b) => a.index-b.index);
+						let layer = spectrumExport.Layers.filter((layer) => layer.index === 1).pop();
 
-						let layerData = layers
-							.filter((layer, elIndex) => (!spectrumAnalysis.layerIndicesToIgnore.includes(layer.index) && !(spectrumAnalysis.ignoreLast && elIndex === layers.length - 1)))
-							.map(function (layer) {
-								let c = null;
-								for (let layerPart of layer.Parts) {
-									if (layerPart.elementName === spectrumAnalysis.elementName)
-										c = layerPart.elementConcentration * 100;
-								}
+						/**
+						 * @type {number}
+						 */
+						let radius = +spectrumExportPath.split("r-")[1].split("_")[0];
 
-								return {
-									d: layer.thickness,
-									di: layer.thickness,
-									g: layer.roughnessGammaFWHM,
-									c,
-									i: layer.index
-								};
-							});
-
-						if (spectrumAnalysis.insertLayer) {
-							layerData.unshift({
-								d: 0,
-								di: 0,
-								g: 0,
-								c: 0,
-								i: 0
-							});
+						let concentrations = {
+							"Fe": null,
+							"W ": null,
+							"O ": null
 						}
 
-						// integrate per default
-						for (let layerIndex = 1; layerIndex < layerData.length; layerIndex++)
-							layerData[layerIndex].di += layerData[layerIndex - 1].di;
+						for (let layerPart of layer.Parts)
+							concentrations[layerPart.elementName] = layerPart.elementConcentration;
 
-						let csvData = layerData.map((entry) => [entry.i, entry.d, entry.di, entry.g, entry.c]);
+						return {...concentrations, r: radius }
+					}));
 
-						// Add header
-						csvData.unshift([
-							"", "10^15 atoms/cm²", "10^15 atoms/cm²", "", "at %"
-						]);
-						csvData.unshift([
-							"i", "d", "d_i", "Gamma_FHWM", `c_${spectrumAnalysis.elementName}`
-						]);
+					/**
+					 * NEW: Save contents to CSV file linked in OriginLab
+					 */
 
-						console.log(spectrumAnalysis.Name, csvData);
+					let csvData = layerConcentrations.map((entry) => [entry.r, entry.Fe, entry["W "], entry["O "]]);
 
-						csv.stringify(csvData, {delimiter: `;`}, (e, output) => {
-							FS.writeFileSync(Path.join(spectrumAnalysis.Output, spectrumAnalysis.Name + ".csv"), output);
-						});
-					} else if (spectrumAnalysis instanceof SpectrumAnalysisExportThicknessesUntilPrevalenceReached) {
-						/**
-						 *
-						 * @type {{name: string, d_f: number}[]}
-						 */
-						let layerConcentrations = await Promise.all(spectrumAnalysisFiles.map(async function (spectrumExportPath, index) {
-							let spectrumExport = await SpectrumExport.query().findOne({
-								fsPath: spectrumExportPath
-							}).withGraphFetched("Layers.[Parts]");
+					// Add header
+					csvData.unshift([
+						"mm", "10^15 atoms/cm²", "10^15 atoms/cm²", "10^15 atoms/cm²"
+					]);
+					csvData.unshift([
+						"r", "c_Fe", "c_W", "c_O"
+					]);
 
-							/**
-							 * @type {SIMNRALayer[]}
-							 */
-							let layers = spectrumExport.Layers.sort((a,b) => a.index-b.index);
+					console.log(csvData);
 
-							let fullPrevalence = 0;
-							for (let layer of layers) {
-								for (let layerPart of layer.Parts) {
-									if (layerPart.elementName === spectrumAnalysis.elementName)
-										fullPrevalence += (layerPart.elementConcentration * layer.thickness);
-								}
-							}
+					csv.stringify(csvData, { delimiter: `;` }, (e, output) => {
+						FS.writeFileSync(Path.join(spectrumGroup.Output, spectrumGroup.Name + ".csv"), output);
+					});
 
-							let lastFraction = 0;
-							let sum = 0;
 
-							for (let layer of layers) {
-								/**
-								 * @type {SIMNRALayerPart|null}
-								 */
-								let layerPart = null;
-								for (layerPart of layer.Parts) {
-									if (layerPart.elementName === spectrumAnalysis.elementName)
-										break;
-								}
+					/** OLD: Create plotly object to render
 
-								if (layerPart) {
-									let currentPrevalence = layerPart.elementConcentration * layer.thickness;
+					let traces = [
+						{ x: [], y: [], stackgroup: "Fe" },
+						{ x: [], y: [], stackgroup: "W" },
+						{ x: [], y: [], stackgroup: "O" }
+					];
 
-									if ((lastFraction + currentPrevalence/fullPrevalence) > spectrumAnalysis.thresholdFraction) {
-										sum += (spectrumAnalysis.thresholdFraction - lastFraction) * fullPrevalence / layerPart.elementConcentration;
-										break;
-									} else {
-										lastFraction += currentPrevalence/fullPrevalence;
-										sum += layer.thickness;
-									}
+					layerConcentrations.forEach((cEntry) => {
+						traces[0].x.push(cEntry.r);
+						traces[1].x.push(cEntry.r);
+						traces[2].x.push(cEntry.r);
 
-								}
-							}
+						traces[0].y.push(cEntry.Fe);
+						traces[1].y.push(cEntry["W "]);
+						traces[2].y.push(cEntry["O "]);
+					})
 
-							let name = spectrumAnalysis.Names[index];
+					console.log(traces);*/
 
-							return { name, d_f: sum }
-						}));
-						/**
-						 * NEW: Save contents to CSV file linked in OriginLab
-						 */
 
-						let csvData = layerConcentrations.map((entry) => [entry.name, entry.d_f]);
-
-						// Add header
-						csvData.unshift([
-							"", "10^15 atoms/cm²"
-						]);
-						csvData.unshift([
-							"Name", "d_f"
-						]);
-
-						console.log(spectrumAnalysis.Name, csvData);
-
-						csv.stringify(csvData, {delimiter: `;`}, (e, output) => {
-							FS.writeFileSync(Path.join(spectrumAnalysis.Output, spectrumAnalysis.Name + ".csv"), output);
-						});
-					} else if (spectrumAnalysis instanceof SpectrumAnalysisExportPrevalenceSumUntilThicknessReached) {
-						/**
-						 *
-						 * @type {{name: string, d_f: number}[]}
-						 */
-						let layerConcentrations = await Promise.all(spectrumAnalysisFiles.map(async function (spectrumExportPath, index) {
-							let spectrumExport = await SpectrumExport.query().findOne({
-								fsPath: spectrumExportPath
-							}).withGraphFetched("Layers.[Parts]");
-
-							/**
-							 * @type {SIMNRALayer[]}
-							 */
-							let layers = spectrumExport.Layers.sort((a,b) => a.index-b.index);
-
-							let fullPrevalence = 0;
-							for (let layer of layers) {
-								for (let layerPart of layer.Parts) {
-									if (layerPart.elementName === spectrumAnalysis.elementName)
-										fullPrevalence += (layerPart.elementConcentration * layer.thickness);
-								}
-							}
-
-							let lastDepth = 0;
-							let sum = 0;
-
-							for (let layer of layers) {
-								/**
-								 * @type {SIMNRALayerPart|null}
-								 */
-								let layerPart = null;
-								for (layerPart of layer.Parts) {
-									if (layerPart.elementName === spectrumAnalysis.elementName)
-										break;
-								}
-
-								if (layerPart) {
-									let currentPrevalence = layerPart.elementConcentration * layer.thickness;
-
-									if ((lastDepth + layer.thickness) > spectrumAnalysis.thresholdThickness) {
-										sum += ((spectrumAnalysis.thresholdThickness - lastDepth) * layerPart.elementConcentration)/fullPrevalence;
-										break;
-									} else {
-										lastDepth += layer.thickness;
-										sum += currentPrevalence/fullPrevalence;
-									}
-
-								}
-							}
-
-							let name = spectrumAnalysis.Names[index];
-
-							return { name, p_f: sum }
-						}));
-
-						let csvData = layerConcentrations.map((entry) => [entry.name, entry.p_f]);
-
-						// Add header
-						csvData.unshift([
-							"", "10^15 atoms/cm²"
-						]);
-						csvData.unshift([
-							"Name", "p_f"
-						]);
-
-						console.log(spectrumAnalysis.Name, csvData);
-
-						csv.stringify(csvData, {delimiter: `;`}, (e, output) => {
-							FS.writeFileSync(Path.join(spectrumAnalysis.Output, spectrumAnalysis.Name + ".csv"), output);
-						});
-					}
 				}));
 
 			}
