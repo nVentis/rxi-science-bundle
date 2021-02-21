@@ -1,4 +1,4 @@
 # rxi-science-bundle
-Collection of JavaScript service classes to deal with process automation.
+Collection of JavaScript service classes to deal with automation of SIMNRA processes.
 
-Requires RXI Server for usage
+Requires RXI Server for integration with controllers.
