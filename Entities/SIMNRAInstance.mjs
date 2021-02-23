@@ -44,6 +44,27 @@ let TARGET_ID_ENUM = {
 }
 
 /**
+ * Pads an element's name for use with SIMNRA
+ * @param {string} someString
+ */
+let padElementName = function (someString) {
+    if (typeof someString !== "string")
+        throw new Error("String required");
+
+    switch (someString.length) {
+        case 1:
+            return someString + " ";
+
+        case 2:
+            return someString;
+
+        default:
+            throw Error("Invalid length");
+    }
+
+}
+
+/**
  * Bindings to the OLE interface of SIMNRA
  * @class
  */
@@ -52,7 +73,8 @@ class SIMNRAInstance {
         App: null,
         Target: null,
         Projectile: null,
-        Setup: null
+        Setup: null,
+        Stopping: null
     };
     #Running = true;
     Name = "None";
@@ -81,8 +103,10 @@ class SIMNRAInstance {
         this.simnraFilePath = fsPath;
 
         let Result = await this.#Instance.App.Open(fsPath, true);
+        if (!Result)
+            throw new Error(`Could not open SIMNRA file <${fsPath}>`);
 
-        return !!Result;
+        return true;
     }
 
     /**
@@ -129,27 +153,10 @@ class SIMNRAInstance {
     }
 
     /**
-     * Used for caching calculated items
-     * Is cleared for all writing operations
-     */
-    #temp = {
-        maxDepth: 0
-    };
-
-    clearTemp () {
-        this.#temp = {
-            maxDepth: 0
-        }
-    }
-
-    /**
      * Get the maximum analyzable depth
      * @returns {Promise<number>}
      */
     async getMaximumDepth () {
-        if (this.#temp.maxDepth)
-            return this.#temp.maxDepth;
-
         let nLayers = await this.NumberOfLayers();
 
         let maxDepth = 0;
@@ -162,17 +169,15 @@ class SIMNRAInstance {
 
         while (remainingEnergy - (layerThickness * layerStopping) >= 0) {
             maxDepth += layerThickness;
-            remainingEnergy -= layerThickness * layerStopping;
+            remainingEnergy += - layerThickness * layerStopping;
 
             layerIndex++;
             layerThickness = await this.LayerThickness(layerIndex);
-            layerStopping = await this.StoppingInLayer(layerIndex);
+            layerStopping = await this.StoppingInLayer(layerIndex, remainingEnergy);
         }
 
         // The remaining energy is stopped in the current layer described by layerIndex, layerThickness and layerStopping
         maxDepth += remainingEnergy / layerStopping;
-
-        this.#temp.maxDepth = maxDepth;
 
         return maxDepth;
     }
@@ -195,7 +200,7 @@ class SIMNRAInstance {
 
         while (remainingDepth - layerThickness >= 0) {
             integratedResult += layerThickness * layerElementConcentration;
-            remainingDepth -= layerThickness;
+            remainingDepth += - layerThickness;
 
             layerIndex++;
             layerThickness = await this.LayerThickness(layerIndex);
@@ -233,7 +238,9 @@ class SIMNRAInstance {
         if (E === 0)
             E = 0 + this.#Instance.Setup.Energy;
 
-        let Result = 0 + this.#Instance.Target.StoppingInLayer(Z1, M1, E, targetID, layerIndex);
+        console.log(`Stopping <${E}> <${Z1}> <${M1}>`);
+
+        let Result = 0 + this.#Instance.Stopping.StoppingInLayer(Z1, M1, E, targetID, layerIndex);
 
         return Result;
     }
@@ -243,13 +250,50 @@ class SIMNRAInstance {
     }
 
     /**
-     * Get the concentration of a given element
+     *
      * @param {number} layerIndex
      * @param {string} elementName
+     * @returns {Promise<boolean>}
+     */
+    async targetLayerIncludesElement (layerIndex, elementName) {
+        return (-1 !== (await this.targetLayerGetElementIndex(layerIndex, elementName)));
+    }
+
+    /**
+     * SIMNRA builds the target structure on element indices (not their names). We need to loop through all of them to check
+     * @param {number} layerIndex
+     * @param {string} elementName - Name of the element to find
+     * @returns {Promise<number>} Returns -1 if an element is not included
+     */
+    async targetLayerGetElementIndex (layerIndex, elementName) {
+        let nElements = await this.NumberOfElements(layerIndex);
+
+        elementName = padElementName(elementName);
+
+        for (let elementIndex = 1; elementIndex <= nElements; elementIndex++) {
+            if ((await this.ElementName(layerIndex, elementIndex)) === elementName)
+                return elementIndex;
+        }
+
+        return -1;
+    }
+
+    /**
+     * Get the concentration of a given element
+     * @param {number} layerIndex
+     * @param {string|number} element - Accepts either an elementName or elementIndex inside the layer
      * @returns {Promise<number>}
      */
-    async ElementConcentration (layerIndex, elementName) {
-        let Result = + this.#Instance.Target.ElementConcentration(layerIndex, elementName);
+    async ElementConcentration (layerIndex, element) {
+        let elementIndex;
+        if (typeof element === "string") {
+            elementIndex = await this.targetLayerGetElementIndex(layerIndex, element);
+            if (elementIndex === -1)
+                return 0;
+        } else
+            elementIndex = element;
+
+        let Result = + this.#Instance.Target.ElementConcentration(layerIndex, elementIndex);
 
         return Result;
     }
@@ -341,6 +385,9 @@ class SIMNRAInstance {
         this.#Instance = {};
         this.#Instance.App = new winax.Object("Simnra.App");
         this.#Instance.Target = new winax.Object("Simnra.Target");
+        this.#Instance.Setup = new winax.Object("Simnra.Setup");
+        this.#Instance.Projectile = new winax.Object("Simnra.Projectile");
+        this.#Instance.Stopping = new winax.Object("Simnra.Stopping");
 
         /**
          * __vars
