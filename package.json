@@ -7,6 +7,7 @@
     "email": "bryan.bliewert@nventis.eu"
   },
   "type": "module",
+  "main": "",
   "dependencies": {
     "csv": "^5.3.2",
     "excel4node": "^1.7.2",
